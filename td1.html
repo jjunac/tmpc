@@ -1,0 +1,393 @@
+<!--?xml version="1.0" encoding="UTF-8"?-->
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <meta charset="UTF-8">
+    <title>TP 1 - Architectures multi-cœur</title>
+    <link
+href="https://fonts.googleapis.com/css?family=Raleway:400,500,600,700,800,900"
+      rel="stylesheet" type="text/css">
+    <link rel="stylesheet" type="text/css"
+      href="../../prog_concurrente.css">
+  </head>
+  <body>
+    <h1>TP 1 - Architectures multi-cœur</h1>
+    Pour ce TP, il est nécessaire d'avoir une machine multi-coeur ce qui
+    est généralement le cas aujourd'hui. Vous pouvez travailler par deux
+    et l'idéal serait que chaque configuration du binôme soit
+    différente. Comme les résultats attendus sont très dépendant de
+    l'architecture matérielle et de l'OS ou même du compilateur utilisé,
+    ne vous étonnez pas d'avoir des résultats différents !
+    <p> L'objectif de ce TP est de voir l'impact des caches partagés sur
+      les performances d'un programme qui utilise plusieurs coeurs. Il
+      vous permet de réviser un peu les base de la programmation
+      concurrente car vous devrez écrire deux programmes simples qui
+      créent des threads en C puis en Java ! </p>
+    <p>A l'issu de la séance de TP (à rendre impérativement avant mardi
+      prochain à 13h30), vous devez envoyer une archive comportant les
+      deux noms du binôme et contenant votre compte-rendu à l'adresse
+      michel.riveill at unice.fr. Tous les fichiers doivent comporter
+      les noms du binôme.<br>
+    </p>
+    <p>Le compte rendu doit être rédigé de manière précise et
+      synthétique. Par exemple, si on vous pose une question directe,
+      écrivez la réponse dans le compte rendu. S'il faut coder quelque
+      chose, expliquez dans le compte rendu ce que vous avez fait et/ou
+      les modifications que vous avez apportées. Vous joindrez les
+      fichiers source dans l'état où ils sont à la fin de l'exercice.<br>
+    </p>
+    <p>Bien évidemment, vous décrirez dans le compte rendu, les
+      architectures des stations que vous avez utilisez (processeur / OS
+      / version). En principe, une par membre du groupe.<br>
+    </p>
+    <blockquote type="cite" class="" style="caret-color: rgb(0, 0, 0);
+      font-family: Helvetica; font-size: 12px; font-style: normal;
+      font-variant-caps: normal; font-weight: normal; letter-spacing:
+      normal; orphans: auto; text-align: start; text-indent: 0px;
+      text-transform: none; white-space: normal; widows: auto;
+      word-spacing: 0px; -webkit-text-size-adjust: auto;
+      -webkit-text-stroke-width: 0px; text-decoration: none;
+      border-left-style: none; color: inherit; padding: inherit; margin:
+      inherit;">
+      <div class="">
+        <div id="article" role="article" class="georgia exported"
+          style="text-rendering: optimizeLegibility; font-family:
+          Georgia; font-size: 1.2em; line-height: 1.5em; margin: 0px;
+          padding: 0px;">
+          <div class="page" style="word-wrap: break-word; max-width:
+            100%;">
+            <h2 class="" style="font-size: 1.43em; max-width: 100%;">Une
+              première expérimentation autour des affinités CPU<span
+                class="Apple-converted-space"></span></h2>
+            <p>Inutile de rendre le code, puisque je vous le donne...
+              mais dites moi juste si vous êtes arrivés à l'exécuter et
+              si le résultat observé est celui attendu.<br>
+            </p>
+            L'affinité CPU peut être reglée au niveau processus, ou au
+            niveau thread. L'API est différente suivant l'implémentation
+            des threads de l'OS considéré. Nous nous basons ici sur les
+            NPTL implémentées dans les noyaux Linux &gt;= 2.6.
+            <p class="" style="max-width: 100%;">La première chose à
+              faire est d'écrire le bout de code permettant de changer
+              l'affinité d'un thread donné:</p>
+            <div class="scrollable" style="max-width: 100%; overflow-x:
+              scroll; word-wrap: normal;">
+              <pre class="" style="max-width: 100%; font-size: 0.9em; line-height: 1.45em;">void change_affinity(int cpu, pthread_t thread) {
+    cpu_set_t mask; 
+    __CPU_ZERO( &amp;mask ); 
+    __CPU_SET( cpu, &amp;mask ); 
+    pthread_setaffinity_np(thread, sizeof(mask), &amp;mask);   
+}
+</pre>
+            </div>
+            Ce code est volontairement simplifié et ne fait aucune
+            vérification, en particulier sur le numéro de CPU passé en
+            paramètre.<span class="Apple-converted-space">&nbsp;</span>
+            <p class="" style="max-width: 100%;">Ensuite, il faut
+              rajouter, dans la méthode exécutée par chacun des threads
+              un appel</p>
+            <div class="scrollable" style="max-width: 100%; overflow-x:
+              scroll; word-wrap: normal;">
+              <pre class="" style="max-width: 100%; font-size: 0.9em; line-height: 1.45em;">  /* Demande le placement du thread sur le CPU/Core 1 */
+  change_affinity(1,pthread_self());
+</pre>
+            </div>
+            <p class="" style="max-width: 100%;">Finalement, pour que
+              l'effet soit visible, modifions le programme pour que les
+              threads consomment du CPU avec la méthode suivante, qui
+              devra être appelée immédiatement après avoir fixé
+              l'affinité</p>
+            <div class="scrollable" style="max-width: 100%; overflow-x:
+              scroll; word-wrap: normal;">
+              <pre class="" style="max-width: 100%; font-size: 0.9em; line-height: 1.45em;">void 
+mange_cpu(void ) {
+    /*
+     On mange du CPU en mettant du code qui ne devrait pas
+     etre supprimé par le compilateur
+     */
+    int i=1;
+   while (1) {
+    i=i*2+1;
+    if (i%2==0)
+      break;
+  } 
+}
+</pre>
+            </div>
+            <p class="" style="max-width: 100%;">Il ne reste plus qu'à
+              tester</p>
+            <h3 class="" style="font-size: 1.25em; max-width: 100%;">2
+              threads mangeurs de CPU sur le même Core<span
+                class="Apple-converted-space">&nbsp;</span></h3>
+            On met dans les 2 threads le code suivant (on veut exécuter
+            les deux threads sur le même coeur)<br>
+            <div class="scrollable" style="max-width: 100%; overflow-x:
+              scroll; word-wrap: normal;">
+              <pre class="" style="max-width: 100%; font-size: 0.9em; line-height: 1.45em;">  change_affinity(1,pthread_self());
+  mange_cpu();
+</pre>
+            </div>
+            <p class="" style="max-width: 100%;">Une fois le programme
+              compilé/lancé, il est possible de voir les threads avec
+              top</p>
+            <div class="scrollable" style="max-width: 100%; overflow-x:
+              scroll; word-wrap: normal;">
+              <pre class="" style="max-width: 100%; font-size: 0.9em; line-height: 1.45em;">   top -H -p `ps  -fe | grep filter3th-Linux | grep -v grep | awk '{print $2}'`
+</pre>
+            </div>
+            ce qui donne (extrait) sur ma machine
+            <div class="scrollable" style="max-width: 100%; overflow-x:
+              scroll; word-wrap: normal;">
+              <pre class="" style="max-width: 100%; font-size: 0.9em; line-height: 1.45em;">PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND
+19922 fhuet     20   0     0    0    0 R   50  0.0   0:03.41 filter3th-Linux
+19924 fhuet     20   0     0    0    0 R   50  0.0   0:03.40 filter3th-Linux
+</pre>
+            </div>
+            On voit bien que chaque thread a 50% du cpu, ce qui ici
+            signifie qu'ils ont chacun la moitié d'un core.
+            <h3 class="" style="font-size: 1.25em; max-width: 100%;">2
+              threads mangeurs de CPU sur deux Core différents<span
+                class="Apple-converted-space">&nbsp;</span></h3>
+            On met dans 1 threads le code suivant
+            <div class="scrollable" style="max-width: 100%; overflow-x:
+              scroll; word-wrap: normal;">
+              <pre class="" style="max-width: 100%; font-size: 0.9em; line-height: 1.45em;">  change_affinity(1,pthread_self());
+  mange_cpu();
+</pre>
+            </div>
+            et dans un autre le code
+            <div class="scrollable" style="max-width: 100%; overflow-x:
+              scroll; word-wrap: normal;">
+              <pre class="" style="max-width: 100%; font-size: 0.9em; line-height: 1.45em;">  change_affinity(2,pthread_self());
+  mange_cpu();
+</pre>
+            </div>
+            <p class="" style="max-width: 100%;">Avec top, on obtient<span
+                class="Apple-converted-space">&nbsp;</span></p>
+            <div class="scrollable" style="max-width: 100%; overflow-x:
+              scroll; word-wrap: normal;">
+              <pre class="" style="max-width: 100%; font-size: 0.9em; line-height: 1.45em;">PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND
+19949 fhuet     20   0     0    0    0 R   99  0.0   0:12.30 filter3th-Linux
+19951 fhuet     20   0     0    0    0 R   96  0.0   0:12.14 filter3th-Linux
+</pre>
+            </div>
+            <p class="" style="max-width: 100%;">Cette fois, chacun des
+              processus a 100% du CPU, donc on a bien chacun sur un Core
+              différent.&nbsp; <br>
+            </p>
+          </div>
+        </div>
+      </div>
+    </blockquote>
+    <h2>Exercice 1 : The silent killer</h2>
+    <p> On veut étudier la bonne distribution du générateur de nombre
+      aléatoires suivant : </p>
+    <pre>static unsigned long x, y=362436069, z=521288629;
+
+unsigned long xorshf96(void) {
+    unsigned long t;
+
+    x ^= x &lt;&lt; 16;
+    x ^= x &gt;&gt; 5;
+    x ^= x &lt;&lt; 1;
+
+    t = x;
+    x = y;
+    y = z;
+    z = t ^ x ^ y;
+
+    return z;
+}
+</pre>
+    <p> L'idée va être d'utiliser les quatre cœurs de la machine pour
+      lancer quatre threads qui génèreront de très nombreux nombres
+      aléatoires en utilisant ce générateur. Les threads compteront le
+      nombres de valeurs paires et impaires générées, pour s'assurer
+      qu'on en a à peu près autant. </p>
+    <div class="important_question">
+      <h4> <span class="question_title">Question 1.1.</span></h4>
+      Ce générateur de nombres aléatoires ne va pas fonctionner
+      correctement s'il est appelé par plusieurs threads en parallèle.
+      On peut cependant le faire fonctionner en ajoutant un seul
+      mot-clé. Lequel ? Indice : <a
+href="https://gcc.gnu.org/onlinedocs/gcc-3.3.1/gcc/Thread-Local.html#Thread-Local">regardez
+
+
+
+
+
+        ici.</a> </div>
+    <p> Créez un fichier <span class="src">exercice1.c</span> contenant
+      cette fonction. Ajoutez un tableau global qui stockera les
+      résultats pour chaque thread: </p>
+    <pre>uint64_t results[4];
+</pre>
+    Créez une fonction exécutée par chacune des threads. Celle-ci reçoit
+    en paramètre son identité (un numéro entre 0 et 3). Le code de
+    celle-ci est le suivant :<br>
+    <ol>
+      <li>Chaque thread se place sur un coeur différent. Attention :
+        selon les systèmes, il faut soit le programmer (voir <span
+          class="src"><a
+href="http://man7.org/linux/man-pages/man3/pthread_setaffinity_np.3.html">pthread_setaffinity_np</a>()</span>),
+
+
+
+
+        soit cela est pris en charge par le scheduler</li>
+      <li>Initialise la racine de son générateur avec un calcul faisant
+        intervenir son identifiant et le compteur de microsecondes de
+        son timestamp courant (voir <a
+          href="http://man7.org/linux/man-pages/man2/gettimeofday.2.html">
+        </a><span class="src"><a
+            href="http://man7.org/linux/man-pages/man2/gettimeofday.2.html">gettimeofday</a>()</span>).
+
+
+
+
+        <br>
+      </li>
+      <li>Appelle la fonction <span class="src">xorshf96() un très
+          grand nombre de fois (par exemple </span>10^8)<span
+          class="src"></span> et ajoute son résultat modulo 2 à <span
+          class="src">results[thread_id]</span>. </li>
+    </ol>
+    <h4> <span class="question_title"></span></h4>
+    Créez une fonction <span class="src">main()</span> qui crée quatre
+    threads, leur transmet leur identité, attend leur terminaison, puis
+    affiche les quatre cases du tableau <span class="src">results</span>.<br>
+    <br>
+    <p>Le même programme doit se compiler sur chaque station. Vous
+      donnerez dans le compte rendu la ligne de compilation.
+      Généralement il est possible à la compilation de distinguer les
+      architectures grâce aux directives de compilation. Voici un
+      exemple :</p>
+    <pre class="default prettyprint prettyprinted" style="margin: 0px 0px 1em; padding: 5px; border: 0px; font-family: Consolas, Menlo, Monaco, &quot;Lucida Console&quot;, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, &quot;Bitstream Vera Sans Mono&quot;, &quot;Courier New&quot;, monospace, sans-serif; font-size: 13px; font-style: normal; font-variant-caps: normal; font-weight: normal; font-stretch: inherit; line-height: inherit; vertical-align: baseline; width: auto; max-height: 600px; overflow: auto; background-color: rgb(239, 240, 241); display: block; color: rgb(57, 51, 24); word-wrap: normal; letter-spacing: normal; orphans: auto; text-align: left; text-indent: 0px; text-transform: none; widows: auto; word-spacing: 0px; -webkit-text-size-adjust: auto; -webkit-text-stroke-width: 0px;"><code style="margin: 0px; padding: 0px; border: 0px; font-family: Consolas, Menlo, Monaco, &quot;Lucida Console&quot;, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, &quot;Bitstream Vera Sans Mono&quot;, &quot;Courier New&quot;, monospace, sans-serif; font-size: 13px; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; background-color: rgb(239, 240, 241); white-space: inherit;"><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">#ifdef</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);"> _WIN64
+   </span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">//define something for Windows (64-bit)</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);">
+</span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">#elif</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);"> _WIN32
+   </span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">//define something for Windows (32-bit)</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);">
+</span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">#elif</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);"> __APPLE__
+</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);">   </span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">// define something for OSX (and other Apple platform)</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);">
+</span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">#elif</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);"> __linux
+    </span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">// linux</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);">
+</span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">#elif</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);"> __unix </span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">// all unices not caught above</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);">
+    </span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">// Unix</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);">
+</span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">#elif</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);"> __posix
+    </span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">// POSIX</span><span class="pln" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(48, 51, 54);">
+</span><span class="com" style="margin: 0px; padding: 0px; border: 0px; font-family: inherit; font-size: inherit; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; vertical-align: baseline; color: rgb(133, 140, 147);">#endif</span></code></pre>
+    <p id="exercice1">Exécuter le programme ci-dessus et mesurer son
+      temps d'exécution (voir la commande <a
+        href="http://man7.org/linux/man-pages/man1/time.1.html"><span
+          class="src">time</span></a>). Si tout s'est bien passé,
+      l'exécution du programme devrait prendre entre 5 et 10 secondes,
+      et chaque thread devrait produire environ 10^8/2 nombres
+      aléatoires impairs. </p>
+    <div class="important_question">
+      <h4> <span class="question_title">Question 1.2.</span></h4>
+      Le programme que vous avez écrit a un important goulot
+      d'étranglement (bottleneck), lequel ?<br>
+      <br>
+      Corrigez-le de manière simple. Sur certaines architectures,
+      l'amélioration des performances est drastique. Sur d'autre cela
+      n'a aucun effet. Quelle accélération obtenez-vous par rapport à la
+      version précédente ?<br>
+      <br>
+      Jouez sur l'optimiseur de compilation : -O1, -O2 ou -O3.
+      Qu'observez-vous ?<br>
+    </div>
+    <div class="important_question">
+      <h4> <span class="question_title">Question 1.3.</span></h4>
+      Dans le but d'estimer la taille des lignes de cache de votre
+      machine, on va modifier le programme précédent pour faire en sorte
+      que la variable résultat de chaque thread soit suffisamment
+      éloignée les unes des autres. Nous allons utilisé pour cela une
+      structure :<br>
+      <br>
+      <blockquote>
+        <pre>struct results {<br>&nbsp;&nbsp;&nbsp; uint64_t result0;<br>&nbsp;&nbsp;&nbsp; char padding1[PADDING];<br>&nbsp;&nbsp;&nbsp; uint64_t result1;<br>&nbsp;&nbsp;&nbsp; char padding2[PADDING];<br>&nbsp;&nbsp;&nbsp; uint64_t result2;<br>&nbsp;&nbsp;&nbsp; char padding3[PADDING];<br>&nbsp;&nbsp;&nbsp; uint64_t result3;<br>} __attribute__ ((packed)) results __attribute__ ((aligned (64)));;</pre></blockquote>La constante PADDING sera passé à chaque programme lors de la compilation.<br><br>Construisez ensuite un script qui fait varier le paramètre PADDING de 1 à 100. Rappel : pour passer un paramètre lors de la compilation on utilise la directive -DPADDING=valeur. On compilera sans aucune optimisation (pas d'option -O1, -O2 ou -O3).<br><br>Recueillez les résultats et dans un document Excell (ou autre outils à votre choix), tracez les performances correspondantes. Insérez le graphe dans votre compte-rendu et expliquez le
+      mieux possible
+      ce que vous y voyez.
+    </div>
+    <h2 id="exercice2">Exercice 2 : faire A ou B.</h2><h2>A) Mesurer les performances de sa machine
+</h2><p>Vous pouvez utiliser <strong style="caret-color: rgb(0, 0, 0); color: rgb(0, 0, 0); font-family: helvetica; font-style: normal; font-variant-caps: normal; letter-spacing: normal; orphans: auto; text-align: -webkit-center; text-indent: 0px; text-transform: none; white-space: normal; widows: auto; word-spacing: 0px; -webkit-text-size-adjust: auto; -webkit-text-stroke-width: 0px; text-decoration: none;"><a href="http://www.bitmover.com/lmbench/">LMbench</a> - Tools for Performance Analysis</strong><span style="caret-color: rgb(0, 0, 0); color: rgb(0, 0, 0); font-family: helvetica; font-style: normal; font-variant-caps: normal; letter-spacing: normal; orphans: auto; text-align: -webkit-center; text-indent: 0px; text-transform: none; white-space: normal; widows: auto; word-spacing: 0px; -webkit-text-size-adjust: auto; -webkit-text-stroke-width: 0px; text-decoration: none;"></span></p>
+<p>Fonctionne pour Linux et Mac OS (dans ce cas, il y a une <a href="https://stackoverflow.com/questions/38591835/how-to-run-run-lmbench-on-mac">correction à appliquer</a>).<br></p><p>Dans le rapport, expliquer les principaux résultats obtenus... ne mettez pas les résultats bruts.<br><strong style="caret-color: rgb(0, 0, 0); color: rgb(0, 0, 0); font-family: helvetica; font-style: normal; font-variant-caps: normal; letter-spacing: normal; orphans: auto; text-align: -webkit-center; text-indent: 0px; text-transform: none; white-space: normal; widows: auto; word-spacing: 0px; -webkit-text-size-adjust: auto; -webkit-text-stroke-width: 0px; text-decoration: none;"></strong><span style="caret-color: rgb(0, 0, 0); color: rgb(0, 0, 0); font-family: helvetica; font-style: normal; font-variant-caps: normal; letter-spacing: normal; orphans: auto; text-align: -webkit-center; text-indent: 0px; text-transform: none; white-space: normal; widows: auto; word-spacing: 0px; -webkit-text-size-adjust: auto; -webkit-text-stroke-width: 0px; text-decoration: none;"></span></p>
+
+<h2 id="exercice2">B) Du faux partage (false sharing) en Java ?</h2>
+    <p>
+      S'il faut faire attention au faux partage en C, on peut se
+      demander s'il y a
+      des raisons de s'en inquiéter en Java. En effet, on ne manipule
+      pas directement
+      des adresses mémoire en Java et il est bien difficile de savoir comment est
+      géré la mémoire à bas
+      niveau. Néanmoins, on veut créer un programme similaire à celui de l'exercice
+      précédent, la
+      différence étant qu'en plus de renvoyer un résultat, un thread
+      stockera son
+      progrès dans une variable globale.
+    
+    </p><div class="important_question"><h4>
+      </h4><div class="important_question">
+<h4>
+      <span class="question_title">Question 2.1.</span></h4>
+<p>Créez une classe <span class="src">Exercice2</span>.<br>
+</p>
+<p>Dans
+      celle-ci, créez une
+      classe interne statique <span class="src">ThreadInfo</span> qui
+      contiendra un
+      <span class="src">volatile long progress</span> qui stockera
+      l'avancement d'un thread,
+      et un <span class="src">long result</span> qui stockera le
+      résultat d'un thread.<br>
+</p>
+<p>Créez ensuite une variable infos, attribut de la classe <span class="src">Exercice2</span>, de type 'tableau <span class="src">ThreadInfo</span>s'
+      qui sera de taille 4 (<tt>static ThreadInfo[] infos = new ThreadInfo[4]</tt>)    </p>
+</div><p>
+      Le reste de l'implémentation est similaire à celle de l'exercice
+      précédent.
+      Implémentez la fonction <span class="src">xorshf96()</span> en
+      Java, puis
+      créez une fonction <span class="src">main()</span> qui crée
+      quatre threads.
+      Ces threads effectueront chacun 10^8 itérations, dans lesquelles
+      ils appelleront
+      <span class="src">xorshf96()</span>, ajouteront le résultat modulo
+      2 à
+      <span class="src">result</span>, et incrémenteront <span class="src">progress</span>.
+    </p>
+    <div class="important_question">Une fois le programme décrit ci-dessus implémenté, lancez-le. Quel
+      est le
+      temps d'exécution ? Où se trouve le false sharing potentiel ?
+    
+    
+      
+</div>
+<h4><span class="question_title"></span></h4>
+<h4><span class="question_title">Question 2.2.</span></h4><p>Reprenez la classe <span class="src">Exercice2</span> et ajoutez le mot clé volatile devant la variable en faux partage. Dites en quoi, sa signification en Java est un peu différente de celle
+      en C.
+    
+    
+</p><p>
+      <span class="question_title"></span><span class="question_title"></span>Une fois le programme décrit ci-dessus implémenté, lancez-le. Qu'observez-vous ?
+    
+    
+      </p></div><div class="important_question"><h4><span class="question_title">Question 2.2.</span></h4>
+Ajoutez du padding pour éviter le false sharing potentiel.
+      Observez-vous une
+      amélioration des performances ? Si vous n'en observez pas, faites
+      en sorte que
+      les variables de padding soient utilisées artificiellement quelque
+      part pour
+      vous assurer que Java ne les supprime pas. Les performances
+      sont-elles
+      maintenant améliorées ?<span class="question_title"><br></span><h4><span class="question_title">Question 2.3. (optionnelle)</span></h4><h4><span class="question_title"></span></h4>Est-il possible de placer les threads Java sur des cœurs bien
+      définis avec l'API
+      standard ? Si cela n'est pas le cas, trouvez un moyen de le faire.
+      Quel impact
+      observez-vous sur les performances ?
+    
+    </div><div id="footer"><br></div>
+  
+
