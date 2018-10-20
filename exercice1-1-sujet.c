@@ -9,9 +9,9 @@
 
 #define NB_THREADS 4
 
-__thread unsigned long x, y=362436069, z=521288629;
-// Bottleneck ??
-__thread uint64_t results;
+
+unsigned long x, y=362436069, z=521288629;
+uint64_t results[NB_THREADS];
 
 void change_affinity(int cpu, pthread_t thread) {
     cpu_set_t mask; 
@@ -32,8 +32,13 @@ unsigned long xorshf96() {
     return z;
 }
 
+void print_odd(int id, uint64_t res) {
+    printf("# of odd numbers in Thread%d: %d\n", id, res);
+}
+
 void *fct(void *args) {
     int id = (int)args;
+    change_affinity(id, pthread_self());
     struct timeval time;
 	gettimeofday (&time, NULL);
 	x = (unsigned long int) time.tv_usec * (id + 1);
@@ -49,9 +54,8 @@ void *fct(void *args) {
 		y = z;
 		z = t ^ x ^ y;
         
-        results += (z%2);
+        results[id] += (z%2);
 	}
-    printf("# of odd numbers in Thread%d: %d\n", id, results);
 }
 
 int main(int argc, char const *argv[])
@@ -62,6 +66,9 @@ int main(int argc, char const *argv[])
     }
     for(int i=0; i < NB_THREADS; i++) {
         pthread_join(threads[i], NULL);
+    }
+    for(int i=0; i < NB_THREADS; i++) {
+        printf("# of odd numbers in Thread%d: %d\n", i, results[i]);
     }
     return 0;
 }

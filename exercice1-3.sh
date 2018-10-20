@@ -4,7 +4,7 @@ FILENAME=exercice1-3
 
 echo "Padding,Elapsed time"
 
-for i in {1..2}
+for i in {1..100}
 do
     rm -f $FILENAME
     make $FILENAME PADDING=$i &> /dev/null
@@ -13,5 +13,5 @@ do
         exit 1
     fi
     echo -n "$i,"
-    /usr/bin/time -f "%e" ./$FILENAME > /dev/null
+    (/usr/bin/time -f "%e" ./$FILENAME > /dev/null) 2>&1
 done
